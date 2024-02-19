@@ -253,6 +253,49 @@ class Console(object):
         self.callback({"level": "warning", "content": self.to_string(*args)})
 
 
+class EditorToplevel(tk.Toplevel):
+    widget = None
+
+    def __init__(self, master=None):
+        super().__init__(master)
+        self.title("editor")
+
+        f1 = ttk.Frame(self)
+        f1.pack(fill="x")
+        label_key = ttk.Label(f1, text="   key:")
+        label_key.pack(side="left", pady=(5, 0), padx=(5, 0))
+        entry_key = ttk.Entry(f1)
+        entry_key.pack(side="left", padx=5)
+        self.entry_key = entry_key
+
+        f2 = ttk.Frame(self)
+        f2.pack(fill="x")
+        label_value = ttk.Label(f2, text="value:")
+        label_value.pack(side="left", pady=(5, 0), padx=(5, 0))
+        entry_value = ttk.Entry(f2)
+        entry_value.pack(side="left", padx=5)
+        self.entry_value = entry_value
+
+        f3 = ttk.Frame(self)
+        f3.pack(fill="x")
+        cancel_btn = ttk.Button(f3, text="Cancel")
+        cancel_btn.pack(side="right", pady=5, padx=5)
+        submit_btn = ttk.Button(f3, text="Submit", command=self.submit)
+        submit_btn.pack(side="right")
+    
+    def config(self, *args, **kwargs):
+        self.widget = kwargs['widget']
+
+    def set(self, key: str, value: str):
+        self.entry_key.delete(0, 'end')
+        self.entry_key.insert('end', key)
+        self.entry_value.delete(0, 'end')
+        self.entry_value.insert('end', value)
+    
+    def submit(self):
+        self.widget.insert("", "end", values=(self.entry_key.get(), self.entry_value.get()))
+
+
 class RequestWindow(object):
 
     method_list = ["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"]
@@ -260,22 +303,25 @@ class RequestWindow(object):
     def __init__(self, window, callback=None):
         self.callback = callback
 
+        ff = ttk.Frame(window)
+        ff.pack(fill="x")
+        close_btn = ttk.Button(ff, text="Close", command=self.on_close)
+        close_btn.pack(side="right")
+        save_btn = ttk.Button(ff, text="Save", command=self.save_handler)
+        save_btn.pack(side="right", padx=5)
+
         north = ttk.Frame(window)
-        close_btn = ttk.Button(north, text="Close", command=self.on_close)
-        close_btn.grid(row=0, column=12)
-        save_btn = ttk.Button(north, text="Export", command=self.save_handler)
-        save_btn.grid(row=0, column=11)
+        north.pack(fill="x")
         # 创建请求方式下拉框和URL输入框
         self.method_box = ttk.Combobox(north, width=10, values=self.method_list)
         self.method_box.current(0)
-        self.method_box.grid(row=0, column=0)
+        self.method_box.pack(side="left")
         self.url_box = ttk.Entry(north, width=50)
-        self.url_box.grid(row=0, column=1, columnspan=8)
+        self.url_box.pack(side="left", padx=5, pady=5)
         sub_btn = ttk.Button(north, text="Send")  # 发送请求按钮
         # 绑定发送请求按钮的事件处理函数
         sub_btn.config(command=self.send_request)
-        sub_btn.grid(row=0, column=10)
-        north.pack()
+        sub_btn.pack(side="left")        
 
         # 创建一个PanedWindow
         paned_window = ttk.PanedWindow(window, orient=tk.VERTICAL)
@@ -289,18 +335,26 @@ class RequestWindow(object):
         params_frame = ttk.Frame(notebook)
         paramstoolbar = ttk.Frame(params_frame)
         paramstoolbar.pack(fill=tk.X)
-        paramsaddbtn = ttk.Button(paramstoolbar, text="Add")
-        paramsaddbtn.pack(side=tk.LEFT, padx=(0, 5))
-        paramseditbtn = ttk.Button(paramstoolbar, text="Edit")
-        paramseditbtn.pack(side=tk.LEFT, padx=(0, 5))
+        paramsaddbtn = ttk.Button(paramstoolbar, text="Add", command=EditorToplevel)
+        paramseditbtn = ttk.Button(paramstoolbar, text="Edit", command=EditorToplevel)
         paramsdeletebtn = ttk.Button(paramstoolbar, text="Delete")
-        paramsdeletebtn.pack(side=tk.LEFT, padx=(0, 5))
-        self.params_box = tk.Text(params_frame, height=12)
-        self.params_box.insert(tk.END, "{}")
-        self.params_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        paramsdeletebtn.pack(side="right", padx=5,pady=5)
+        paramseditbtn.pack(side="right", padx=(5, 0), pady=5)
+        paramsaddbtn.pack(side="right", padx=(5, 0), pady=5)
+
+        self.params_box = ttk.Treeview(params_frame, columns=("key", "value"), show="headings", height=6)
+        self.params_box.column("key", width=1)
+        self.params_box.heading("key", text="key")
+        self.params_box.heading("value", text="value")
+        params_scrollbar_x = ttk.Scrollbar(
+            params_frame, command=self.params_box.xview, orient="horizontal")
         params_scrollbar = ttk.Scrollbar(params_frame, command=self.params_box.yview)
-        params_scrollbar.pack(side=tk.LEFT, fill=tk.Y)
-        self.params_box.config(yscrollcommand=params_scrollbar.set)
+        params_scrollbar.pack(side="right", fill=tk.Y, pady=(0, params_scrollbar_x.winfo_reqheight()))
+        params_scrollbar_x.pack(side="bottom", fill=tk.X)
+        self.params_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        self.params_box.config(
+            xscrollcommand=params_scrollbar_x.set,
+            yscrollcommand=params_scrollbar.set)
         notebook.add(params_frame, text="Params")
 
         # 创建请求头页面
@@ -308,17 +362,24 @@ class RequestWindow(object):
         headertoolbar = ttk.Frame(headers_frame)
         headertoolbar.pack(fill=tk.X)
         headeraddbtn = ttk.Button(headertoolbar, text="Add")
-        headeraddbtn.pack(side=tk.LEFT, padx=(0, 5))
+        headeraddbtn.pack(side=tk.LEFT, padx=5, pady=5)
         headereditbtn = ttk.Button(headertoolbar, text="Edit")
         headereditbtn.pack(side=tk.LEFT, padx=(0, 5))
         headerdeletebtn = ttk.Button(headertoolbar, text="Delete")
         headerdeletebtn.pack(side=tk.LEFT, padx=(0, 5))
-        self.headers_box = tk.Text(headers_frame, height=12)
-        self.headers_box.insert(tk.END, "{}")
-        self.headers_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        self.headers_box = ttk.Treeview(headers_frame, columns=("key", "value"), show="headings", height=6)
+        self.headers_box.column("key", width=1)
+        self.headers_box.heading("key", text="key")
+        self.headers_box.heading("value", text="value")
+        headers_scrollbar_x = ttk.Scrollbar(
+            headers_frame, command=self.headers_box.xview, orient="horizontal")
         headers_scrollbar = ttk.Scrollbar(headers_frame, command=self.headers_box.yview)
-        headers_scrollbar.pack(side=tk.LEFT, fill=tk.Y)
-        self.headers_box.config(yscrollcommand=headers_scrollbar.set)
+        headers_scrollbar.pack(side="right", fill=tk.Y, pady=(0, headers_scrollbar_x.winfo_reqheight()))
+        headers_scrollbar_x.pack(side="bottom", fill="x")
+        self.headers_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=tk.YES)
+        self.headers_box.config(
+            xscrollcommand=headers_scrollbar_x.set,
+            yscrollcommand=headers_scrollbar.set)
         notebook.add(headers_frame, text="Headers")
 
         # 创建请求体页面
